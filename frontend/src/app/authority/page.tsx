@@ -1,5 +1,1 @@
-import { redirect } from "next/navigation";
-
-export default function AuthorityRootPage() {
-  redirect("/authority/dashboard");
-}
+export { default } from "./dashboard/page";
