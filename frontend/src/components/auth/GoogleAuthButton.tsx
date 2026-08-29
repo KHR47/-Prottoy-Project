@@ -9,14 +9,13 @@ import { getErrorMessage } from "@/lib/errors";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Loader2, AlertCircle } from "lucide-react";
+import toast from "react-hot-toast";
 
 interface GoogleAuthButtonProps {
   onError?: (err: string) => void;
   onSuccess?: () => void;
   text?: "signin_with" | "signup_with" | "continue_with";
 }
-
-import toast from "react-hot-toast";
 
 export function GoogleAuthButton({ onError, onSuccess, text = "continue_with" }: GoogleAuthButtonProps) {
   const router = useRouter();

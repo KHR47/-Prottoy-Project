@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Hind_Siliguri } from "next/font/google";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/layout/Providers";
 import "./globals.css";
 
@@ -62,6 +63,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: themeInitScript }}
         />
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
