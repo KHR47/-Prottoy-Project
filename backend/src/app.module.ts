@@ -67,47 +67,62 @@ import { UniversalVotesModule } from './votes/votes.module';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('DATABASE_HOST'),
-        port: Number(config.get<string>('DATABASE_PORT')),
-        username: config.get<string>('DATABASE_USER'),
-        password: config.get<string>('DATABASE_PASSWORD'),
-        database: config.get<string>('DATABASE_NAME'),
-        entities: [
-          User,
-          Division,
-          District,
-          Upazila,
-          Thana,
-          Category,
-          Report,
-          Comment,
-          StatusHistory,
-          ReportSupport,
-          Notification,
-          Zone,
-          Document,
-          ParkingLot,
-          ParkingSlot,
-          Booking,
-          Violation,
-          Vehicle,
-          WaterMeter,
-          GasMeter,
-          ElectricityMeter,
-          GhushReport,
-          GhushReportEvidence,
-          LostFoundItem,
-          HousingListing,
-          HousingReview,
-          ServiceListing,
-          ServiceReview,
-          UniversalComment,
-          UniversalVote,
-        ],
-        synchronize: true,
-      }),
+      useFactory: (config: ConfigService) => {
+        const host = config.get<string>('DATABASE_HOST', 'localhost');
+        const isCloudDb = 
+          config.get<string>('NODE_ENV') === 'production' ||
+          config.get<string>('DATABASE_SSL') === 'true' ||
+          host !== 'localhost' && host !== '127.0.0.1';
+
+        const databaseUrl = config.get<string>('DATABASE_URL');
+
+        return {
+          type: 'postgres',
+          ...(databaseUrl
+            ? { url: databaseUrl }
+            : {
+                host,
+                port: Number(config.get<string>('DATABASE_PORT', '5432')),
+                username: config.get<string>('DATABASE_USER', 'postgres'),
+                password: config.get<string>('DATABASE_PASSWORD', ''),
+                database: config.get<string>('DATABASE_NAME', 'smart_city_db'),
+              }),
+          ssl: isCloudDb ? { rejectUnauthorized: false } : false,
+          entities: [
+            User,
+            Division,
+            District,
+            Upazila,
+            Thana,
+            Category,
+            Report,
+            Comment,
+            StatusHistory,
+            ReportSupport,
+            Notification,
+            Zone,
+            Document,
+            ParkingLot,
+            ParkingSlot,
+            Booking,
+            Violation,
+            Vehicle,
+            WaterMeter,
+            GasMeter,
+            ElectricityMeter,
+            GhushReport,
+            GhushReportEvidence,
+            LostFoundItem,
+            HousingListing,
+            HousingReview,
+            ServiceListing,
+            ServiceReview,
+            UniversalComment,
+            UniversalVote,
+          ],
+          synchronize: true,
+        };
+      },
     }),
 
     UsersModule,
