@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useGoogleLogin } from "@react-oauth/google";
-import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { saveAuth } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/errors";
@@ -26,152 +24,83 @@ export function GoogleAuthButton({
   onSuccess,
   text = "continue_with",
 }: GoogleAuthButtonProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect");
   const { isBangla } = useLanguage();
   const { theme } = useTheme();
-
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState("");
 
-  const handleAuthPayload = async (payload: {
-    accessToken?: string;
-    credential?: string;
-  }) => {
-    setIsLoading(true);
-    setLocalError("");
-    const toastId = toast.loading(
-      isBangla ? "গুগল অ্যাকাউন্ট যাচাই হচ্ছে..." : "Signing in with Google..."
-    );
-
-    try {
-      const response = await api.post("/auth/google", payload);
-
-      saveAuth(response.data.accessToken, response.data.user);
-      onSuccess?.();
-
-      toast.success(
-        isBangla
-          ? `স্বাগতম, ${response.data.user.name || "নাগরিক"}!`
-          : `Welcome back, ${response.data.user.name || "Citizen"}!`,
-        { id: toastId }
-      );
-
-      const role = response.data.user.role;
-      const targetPath =
-        redirectTo ||
-        (role === "citizen"
-          ? "/dashboard"
-          : role === "authority"
-          ? "/authority/dashboard"
-          : role === "officer"
-          ? "/officer/reports"
-          : role === "driver"
-          ? "/driver/dashboard"
-          : role === "attendant"
-          ? "/attendant/dashboard"
-          : "/admin/dashboard");
-
-      setTimeout(() => {
-        window.location.href = targetPath;
-      }, 300);
-    } catch (err: unknown) {
-      const msg = getErrorMessage(
-        err,
-        isBangla
-          ? "গুগল সাইন-ইন সম্পন্ন করা যায়নি। ক্লাউড সার্ভার চালু হতে সময় লাগতে পারে।"
-          : "Google authentication failed. Cloud server might be waking up, please try again."
-      );
-      setLocalError(msg);
-      onError?.(msg);
-      toast.error(msg, { id: toastId });
-      setIsLoading(false);
-    }
-  };
-
-  // Check URL hash on mount for direct OAuth popup / redirect returns
+  // Process incoming token from URL hash (direct OAuth return)
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (window.location.hash) {
-      const params = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = params.get("access_token");
-      const idToken = params.get("id_token");
+    if (window.location.hash && window.location.hash.includes("access_token=")) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get("access_token");
 
-      if (accessToken || idToken) {
+      if (accessToken) {
         window.history.replaceState(null, "", window.location.pathname);
-        if (window.opener) {
-          window.opener.postMessage(
-            { type: "GOOGLE_AUTH_SUCCESS", accessToken, idToken },
-            window.location.origin
-          );
-          window.close();
-          return;
-        }
-        handleAuthPayload({
-          accessToken: accessToken || undefined,
-          credential: idToken || undefined,
-        });
+        setIsLoading(true);
+        const toastId = toast.loading(
+          isBangla ? "গুগল অ্যাকাউন্ট যাচাই হচ্ছে..." : "Authenticating with Google..."
+        );
+
+        api
+          .post("/auth/google", { accessToken })
+          .then((res) => {
+            saveAuth(res.data.accessToken, res.data.user);
+            onSuccess?.();
+            toast.success(
+              isBangla
+                ? `স্বাগতম, ${res.data.user.name || "নাগরিক"}!`
+                : `Welcome back, ${res.data.user.name || "Citizen"}!`,
+              { id: toastId }
+            );
+
+            const role = res.data.user.role;
+            const target =
+              role === "authority"
+                ? "/authority/dashboard"
+                : role === "admin"
+                ? "/admin/dashboard"
+                : role === "officer"
+                ? "/officer/reports"
+                : "/dashboard";
+
+            setTimeout(() => {
+              window.location.href = target;
+            }, 300);
+          })
+          .catch((err) => {
+            const msg = getErrorMessage(
+              err,
+              isBangla ? "গুগল সাইন-ইন ব্যর্থ হয়েছে।" : "Google authentication failed."
+            );
+            setLocalError(msg);
+            onError?.(msg);
+            toast.error(msg, { id: toastId });
+            setIsLoading(false);
+          });
       }
     }
+  }, [isBangla, onError, onSuccess]);
 
-    const messageListener = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
-        handleAuthPayload({
-          accessToken: event.data.accessToken,
-          credential: event.data.idToken,
-        });
-      }
-    };
-
-    window.addEventListener("message", messageListener);
-    return () => window.removeEventListener("message", messageListener);
-  }, []);
-
-  const triggerGoogleLogin = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
-      handleAuthPayload({ accessToken: tokenResponse.access_token });
-    },
-    onError: (errorResponse) => {
-      console.warn("useGoogleLogin error, switching to direct popup:", errorResponse);
-      openDirectOAuthPopup();
-    },
-  });
-
-  const openDirectOAuthPopup = () => {
-    try {
-      const redirectUri = encodeURIComponent(`${window.location.origin}/login`);
-      const scope = encodeURIComponent("openid email profile");
-      const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=token%20id_token&scope=${scope}&nonce=${Date.now()}&prompt=select_account`;
-
-      const width = 500;
-      const height = 620;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-
-      const popup = window.open(
-        oauthUrl,
-        "GoogleSignInPopup",
-        `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
-      );
-
-      if (!popup || popup.closed || typeof popup.closed === "undefined") {
-        // If popup was blocked by browser, use direct redirect
-        window.location.href = oauthUrl;
-      }
-    } catch (err) {
-      console.error("Direct popup error:", err);
-    }
-  };
-
-  const handleButtonClick = () => {
+  const handleGoogleClick = () => {
+    setIsLoading(true);
     setLocalError("");
+
     try {
-      triggerGoogleLogin();
-    } catch {
-      openDirectOAuthPopup();
+      const redirectUri = `${window.location.origin}/login`;
+      const scope = encodeURIComponent("openid email profile");
+      const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}&response_type=token&scope=${scope}&prompt=select_account`;
+
+      // Direct seamless navigation to Google OAuth
+      window.location.href = oauthUrl;
+    } catch (err) {
+      const msg = getErrorMessage(err, "Failed to initialize Google login");
+      setLocalError(msg);
+      setIsLoading(false);
     }
   };
 
@@ -191,7 +120,7 @@ export function GoogleAuthButton({
       <button
         type="button"
         id="google-oauth-login-button"
-        onClick={handleButtonClick}
+        onClick={handleGoogleClick}
         disabled={isLoading}
         className={`w-full h-11 px-4 rounded-xl font-medium text-sm transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer select-none active:scale-[0.98] ${
           theme === "light"
@@ -203,7 +132,7 @@ export function GoogleAuthButton({
           <>
             <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
             <span>
-              {isBangla ? "গুগল যাচাই হচ্ছে..." : "Authenticating with Google..."}
+              {isBangla ? "গুগল পেজে নিয়ে যাওয়া হচ্ছে..." : "Connecting to Google..."}
             </span>
           </>
         ) : (
