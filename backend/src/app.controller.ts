@@ -6,9 +6,15 @@ import { Public } from './auth/public.decorator';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  @Public()
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  getHello() {
+    return {
+      status: 'online',
+      service: 'Prottoy Civic Transparency & Public Grid API',
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+    };
   }
 
   @Public()
