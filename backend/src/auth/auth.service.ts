@@ -11,6 +11,7 @@ import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 
 @Injectable()
 export class AuthService {
@@ -110,38 +111,68 @@ export class AuthService {
     }
   }
 
-  async googleLogin(credential: string) {
-    if (!credential) {
-      throw new BadRequestException('Google credential token is required');
+  async googleLogin(dto: GoogleLoginDto | string) {
+    const credential = typeof dto === 'string' ? dto : dto?.credential;
+    const accessTokenParam = typeof dto === 'object' ? dto?.accessToken : null;
+
+    if (!credential && !accessTokenParam) {
+      throw new BadRequestException('Google credential token or accessToken is required');
     }
 
     try {
-      const { OAuth2Client } = await import('google-auth-library');
-      const clientId = process.env.GOOGLE_CLIENT_ID || '824497726439-97jvs4d12t3mvt7ttbco5s23qhe0lihq.apps.googleusercontent.com';
-      const client = new OAuth2Client(clientId);
+      let email: string = '';
+      let name: string = 'Google User';
 
-      const ticket = await client.verifyIdToken({
-        idToken: credential,
-        audience: [
-          clientId,
-          '824497726439-97jvs4d12t3mvt7ttbco5s23qhe0lihq.apps.googleusercontent.com',
-        ].filter(Boolean),
-      });
+      if (credential) {
+        const { OAuth2Client } = await import('google-auth-library');
+        const clientId =
+          process.env.GOOGLE_CLIENT_ID ||
+          '824497726439-97jvs4d12t3mvt7ttbco5s23qhe0lihq.apps.googleusercontent.com';
+        const client = new OAuth2Client(clientId);
 
-      const payload = ticket.getPayload();
-      if (!payload || !payload.email) {
-        throw new UnauthorizedException('Invalid Google token payload');
+        const ticket = await client.verifyIdToken({
+          idToken: credential,
+          audience: [
+            clientId,
+            '824497726439-97jvs4d12t3mvt7ttbco5s23qhe0lihq.apps.googleusercontent.com',
+          ].filter(Boolean),
+        });
+
+        const payload = ticket.getPayload();
+        if (!payload || !payload.email) {
+          throw new UnauthorizedException('Invalid Google token payload');
+        }
+
+        email = payload.email.toLowerCase().trim();
+        name = payload.name || payload.given_name || 'Google User';
+      } else if (accessTokenParam) {
+        // Fetch userinfo directly from Google API using the accessToken
+        const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${accessTokenParam}` },
+        });
+
+        if (!res.ok) {
+          throw new UnauthorizedException('Failed to verify Google token with Google servers');
+        }
+
+        const userInfo = await res.json();
+        if (!userInfo || !userInfo.email) {
+          throw new UnauthorizedException('Invalid Google user info response');
+        }
+
+        email = (userInfo.email as string).toLowerCase().trim();
+        name = userInfo.name || userInfo.given_name || 'Google User';
       }
-
-      const email = payload.email.toLowerCase().trim();
-      const name = payload.name || payload.given_name || 'Google User';
 
       // Find user or create if new
       let user = await this.usersService.findByEmail(email);
 
       if (!user) {
         // Create new citizen account
-        const randomPassword = await bcrypt.hash(Math.random().toString(36) + Date.now().toString(), 10);
+        const randomPassword = await bcrypt.hash(
+          Math.random().toString(36) + Date.now().toString(),
+          10,
+        );
         user = await this.usersService.create({
           name,
           email,
@@ -153,7 +184,9 @@ export class AuthService {
       }
 
       if (user.isActive === false) {
-        throw new UnauthorizedException('This account has been deactivated. Please contact support.');
+        throw new UnauthorizedException(
+          'This account has been deactivated. Please contact support.',
+        );
       }
 
       const jwtPayload = {
@@ -170,10 +203,15 @@ export class AuthService {
         user: this.toSafeUser(user),
       };
     } catch (error: any) {
-      if (error instanceof UnauthorizedException || error instanceof BadRequestException) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
-      throw new UnauthorizedException('Google authentication failed: ' + (error?.message || 'Invalid token'));
+      throw new UnauthorizedException(
+        'Google authentication failed: ' + (error?.message || 'Invalid token'),
+      );
     }
   }
 

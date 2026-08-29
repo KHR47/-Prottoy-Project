@@ -24,7 +24,7 @@ export class AuthController {
   @Public()
   @Post('google')
   googleLogin(@Body() googleLoginDto: GoogleLoginDto) {
-    return this.authService.googleLogin(googleLoginDto.credential);
+    return this.authService.googleLogin(googleLoginDto);
   }
 
   @Public()
