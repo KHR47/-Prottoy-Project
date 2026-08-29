@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { User } from './users/entities/user.entity';
 import { Role } from './common/enums/role.enum';
 import { Report } from './reports/entities/report.entity';
@@ -11,7 +12,7 @@ import { LostFoundItem, LostFoundStatus } from './lost-found/entities/lost-found
 import { ParkingSlot, SlotStatus } from './parking/entities/parking-slot.entity';
 
 @Injectable()
-export class AppService {
+export class AppService implements OnApplicationBootstrap {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -26,6 +27,77 @@ export class AppService {
     @InjectRepository(ParkingSlot)
     private readonly parkingSlotRepository: Repository<ParkingSlot>,
   ) {}
+
+  async onApplicationBootstrap() {
+    await this.seedEssentialRoles();
+  }
+
+  private async seedEssentialRoles() {
+    try {
+      const hashedPassword = await bcrypt.hash('123456', 10);
+
+      const accounts = [
+        {
+          email: 'admin@smartcity.gov.bd',
+          name: 'System Administrator',
+          role: Role.ADMIN,
+          password: hashedPassword,
+          district: 'Dhaka',
+          isActive: true,
+        },
+        {
+          email: 'authority@smartcity.gov.bd',
+          name: 'Municipal Authority Command',
+          role: Role.AUTHORITY,
+          password: hashedPassword,
+          district: 'Dhaka',
+          isActive: true,
+        },
+        {
+          email: 'officer@smartcity.gov.bd',
+          name: 'Field Verification Officer',
+          role: Role.OFFICER,
+          password: hashedPassword,
+          district: 'Dhaka',
+          isActive: true,
+        },
+        {
+          email: 'admin@prottoy.gov.bd',
+          name: 'Prottoy System Administrator',
+          role: Role.ADMIN,
+          password: hashedPassword,
+          district: 'Dhaka',
+          isActive: true,
+        },
+        {
+          email: 'authority@prottoy.gov.bd',
+          name: 'Prottoy Municipal Authority',
+          role: Role.AUTHORITY,
+          password: hashedPassword,
+          district: 'Dhaka',
+          isActive: true,
+        },
+      ];
+
+      for (const acc of accounts) {
+        const existing = await this.userRepository.findOne({ where: { email: acc.email } });
+        if (!existing) {
+          const user = this.userRepository.create(acc);
+          await this.userRepository.save(user);
+          console.log(`[Seed] Created ${acc.role} account: ${acc.email} with password: 123456`);
+        } else {
+          // Update password to 123456 to ensure login always succeeds
+          existing.password = hashedPassword;
+          existing.isActive = true;
+          existing.role = acc.role;
+          await this.userRepository.save(existing);
+          console.log(`[Seed] Updated ${acc.role} account: ${acc.email} to password: 123456`);
+        }
+      }
+    } catch (error) {
+      console.error('[Seed] Error seeding essential roles:', error);
+    }
+  }
 
   getHello(): string {
     return 'Smart City Prottoy API Online';
