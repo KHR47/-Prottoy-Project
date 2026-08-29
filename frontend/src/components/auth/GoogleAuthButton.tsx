@@ -16,6 +16,8 @@ interface GoogleAuthButtonProps {
   text?: "signin_with" | "signup_with" | "continue_with";
 }
 
+import toast from "react-hot-toast";
+
 export function GoogleAuthButton({ onError, onSuccess, text = "continue_with" }: GoogleAuthButtonProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -31,11 +33,13 @@ export function GoogleAuthButton({ onError, onSuccess, text = "continue_with" }:
       const msg = isBangla ? "গুগল প্রমাণীকরণ ব্যর্থ হয়েছে।" : "Google token was not received.";
       setLocalError(msg);
       onError?.(msg);
+      toast.error(msg);
       return;
     }
 
     setIsLoading(true);
     setLocalError("");
+    const toastId = toast.loading(isBangla ? "গুগল অ্যাকাউন্ট যাচাই হচ্ছে..." : "Signing in with Google...");
 
     try {
       const response = await api.post("/auth/google", {
@@ -45,28 +49,36 @@ export function GoogleAuthButton({ onError, onSuccess, text = "continue_with" }:
       saveAuth(response.data.accessToken, response.data.user);
       onSuccess?.();
 
-      if (redirectTo) {
-        router.push(redirectTo);
-        return;
-      }
+      toast.success(
+        isBangla
+          ? `স্বাগতম, ${response.data.user.name || "নাগরিক"}!`
+          : `Welcome back, ${response.data.user.name || "Citizen"}!`,
+        { id: toastId }
+      );
 
       const role = response.data.user.role;
-      if (role === "citizen") router.push("/dashboard");
-      else if (role === "authority") router.push("/authority/dashboard");
-      else if (role === "officer") router.push("/officer/reports");
-      else if (role === "driver") router.push("/driver/dashboard");
-      else if (role === "attendant") router.push("/attendant/dashboard");
-      else router.push("/admin/dashboard");
+      const targetPath = redirectTo || (
+        role === "citizen" ? "/dashboard" :
+        role === "authority" ? "/authority/dashboard" :
+        role === "officer" ? "/officer/reports" :
+        role === "driver" ? "/driver/dashboard" :
+        role === "attendant" ? "/attendant/dashboard" :
+        "/admin/dashboard"
+      );
+
+      setTimeout(() => {
+        window.location.href = targetPath;
+      }, 500);
     } catch (err: unknown) {
       const msg = getErrorMessage(
         err,
         isBangla
-          ? "গুগল সাইন-ইন সম্পন্ন করা যায়নি। পুনরায় চেষ্টা করুন।"
-          : "Google authentication failed. Please try again."
+          ? "গুগল সাইন-ইন সম্পন্ন করা যায়নি। ক্লাউড সার্ভার চালু হতে সময় লাগতে পারে।"
+          : "Google authentication failed. Cloud server might be waking up, please try again."
       );
       setLocalError(msg);
       onError?.(msg);
-    } finally {
+      toast.error(msg, { id: toastId });
       setIsLoading(false);
     }
   };
