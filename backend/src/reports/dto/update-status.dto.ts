@@ -8,4 +8,8 @@ export class UpdateStatusDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  rejectionReason?: string;
 }

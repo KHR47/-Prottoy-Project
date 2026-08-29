@@ -6,6 +6,7 @@ import { ParkingService } from './parking.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { Public } from '../auth/public.decorator';
 import { Role } from '../common/enums/role.enum';
 import { SlotStatus } from './entities/parking-slot.entity';
 import { ViolationStatus } from './entities/violation.entity';
@@ -19,21 +20,25 @@ export class ParkingController {
   // CITIZEN — Find & Browse
   // ────────────────────────────────────────────────────────────────────────────
 
+  @Public()
   @Get('lots')
   findAllLots() {
     return this.parkingService.findAllLots();
   }
 
+  @Public()
   @Get('lots/:id')
   findLot(@Param('id', ParseIntPipe) id: number) {
     return this.parkingService.findLotById(id);
   }
 
+  @Public()
   @Get('lots/:id/slots')
   findSlotsByLot(@Param('id', ParseIntPipe) id: number) {
     return this.parkingService.findSlotsByLot(id);
   }
 
+  @Public()
   @Get('slots/:id')
   findSlot(@Param('id', ParseIntPipe) id: number) {
     return this.parkingService.findSlotById(id);

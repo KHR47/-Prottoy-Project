@@ -15,23 +15,32 @@ export class NotificationsService {
   ) {}
 
   async createNotification(
-    user: SafeUser | User,
+    user: SafeUser | User | number,
     message: string,
-    reportId: number,
+    reportId?: number | null,
+    type: string = 'general',
   ) {
+    const targetUserId = typeof user === 'object' && user !== null ? user.id : Number(user);
+    if (!targetUserId || isNaN(targetUserId)) {
+      return null;
+    }
+
     const notification = this.notificationsRepository.create({
-      user: user as User,
+      user: { id: targetUserId } as User,
       message,
-      reportId,
+      reportId: reportId ?? null,
+      type,
     });
 
     const savedNotification =
       await this.notificationsRepository.save(notification);
 
-    // Emit real-time event
-    this.reportsGateway.server
-      .to(`user_${user.id}`)
-      .emit('new_notification', savedNotification);
+    // Emit real-time event if gateway is available
+    if (this.reportsGateway?.server) {
+      this.reportsGateway.server
+        .to(`user_${targetUserId}`)
+        .emit('new_notification', savedNotification);
+    }
 
     return savedNotification;
   }

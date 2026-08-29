@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -26,6 +27,9 @@ export enum ReportType {
 }
 
 @Entity('reports')
+@Index(['status', 'createdAt'])
+@Index(['divisionName', 'districtName'])
+@Index(['type'])
 export class Report {
   @PrimaryGeneratedColumn()
   id: number;

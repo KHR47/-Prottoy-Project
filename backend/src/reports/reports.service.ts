@@ -74,7 +74,7 @@ export class ReportsService {
 
   async create(createReportDto: CreateReportDto, user: SafeUser) {
     if (user.role !== Role.CITIZEN) {
-      throw new ForbiddenException('Only citizens can submit reports');
+      throw new ForbiddenException('Only citizens can submit reports. Authority accounts perform triage and approval.');
     }
 
     const category = await this.categoriesRepository.findOne({
@@ -234,9 +234,19 @@ export class ReportsService {
 
     await this.notificationsService.createNotification(
       officer,
-      `You have been assigned to a new report #${savedReport.id}`,
+      `You have been assigned to investigate report #${savedReport.id} ("${savedReport.title}")`,
       savedReport.id,
+      'report',
     );
+
+    if (savedReport.reportedBy) {
+      await this.notificationsService.createNotification(
+        savedReport.reportedBy,
+        `Your civic report #${savedReport.id} ("${savedReport.title}") has been assigned to Field Officer ${officer.name}.`,
+        savedReport.id,
+        'report',
+      );
+    }
 
     return savedReport;
   }
@@ -257,6 +267,31 @@ export class ReportsService {
       !isAssignedOfficer
     ) {
       throw new ForbiddenException('You are not allowed to update this report');
+    }
+
+    if (updateStatusDto.status === ReportStatus.REJECTED) {
+      const reason =
+        updateStatusDto.notes ||
+        updateStatusDto.rejectionReason ||
+        'Does not match municipal jurisdiction, lack of evidence, or duplicate submission.';
+      const msg = `Your civic report #${report.id} ("${report.title}") was rejected by authority and removed. Reason: ${reason}`;
+
+      const rawReport = await this.reportsRepository.findOne({
+        where: { id: reportId },
+        relations: ['reportedBy'],
+      });
+
+      if (rawReport?.reportedBy) {
+        await this.notificationsService.createNotification(
+          rawReport.reportedBy,
+          msg,
+          null,
+          'report',
+        );
+      }
+
+      await this.reportsRepository.remove(report);
+      return { ...report, id: reportId, status: ReportStatus.REJECTED } as any;
     }
 
     report.status = updateStatusDto.status;
@@ -344,7 +379,7 @@ export class ReportsService {
           'Cannot edit a report that is already being processed unless authority allows it',
         );
       }
-      if (report.reportedBy.id !== user.id) {
+      if (!report.reportedBy || report.reportedBy.id !== user.id) {
         throw new ForbiddenException('You can only edit your own reports');
       }
     } else if (user.role !== Role.ADMIN && user.role !== Role.AUTHORITY) {
@@ -399,7 +434,7 @@ export class ReportsService {
           'Cannot delete a report that is already being processed',
         );
       }
-      if (report.reportedBy.id !== user.id) {
+      if (!report.reportedBy || report.reportedBy.id !== user.id) {
         throw new ForbiddenException('You can only delete your own reports');
       }
     } else if (user.role !== Role.ADMIN) {
@@ -475,7 +510,7 @@ export class ReportsService {
   async requestUpdate(id: number, user: SafeUser) {
     const report = await this.findOne(id, user);
 
-    if (user.role !== Role.CITIZEN || report.reportedBy.id !== user.id) {
+    if (user.role !== Role.CITIZEN || !report.reportedBy || report.reportedBy.id !== user.id) {
       throw new ForbiddenException('Only the creator can request an update');
     }
 

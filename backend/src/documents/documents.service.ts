@@ -25,7 +25,7 @@ export class DocumentsService {
       throw new NotFoundException('Report not found');
     }
 
-    if (report.reportedBy.id !== user.id && user.role === 'citizen') {
+    if (user.role === 'citizen' && (!report.reportedBy || report.reportedBy.id !== user.id)) {
       throw new ForbiddenException('You can only upload documents to your own reports');
     }
 

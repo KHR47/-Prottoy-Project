@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 import { ParkingLot } from './parking-lot.entity';
 import { Booking } from './booking.entity';
 
@@ -17,6 +17,7 @@ export enum SlotType {
 }
 
 @Entity('parking_slots')
+@Index(['status'])
 export class ParkingSlot {
   @PrimaryGeneratedColumn()
   id: number;

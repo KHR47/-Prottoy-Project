@@ -1,7 +1,9 @@
 import {
+  Body,
   Controller,
   Get,
   Patch,
+  Post,
   Param,
   ParseIntPipe,
   UseGuards,
@@ -29,6 +31,14 @@ export class NotificationsController {
   @Patch(':id/read')
   markAsRead(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.notificationsService.markAsRead(id, req.user.id);
+  }
+
+  @Post('ack')
+  ackNotification(
+    @Body('id', ParseIntPipe) id: number,
     @Request() req: RequestWithUser,
   ) {
     return this.notificationsService.markAsRead(id, req.user.id);

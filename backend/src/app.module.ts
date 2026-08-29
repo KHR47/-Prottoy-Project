@@ -1,9 +1,13 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { CategoriesModule } from './categories/categories.module';
 import { Category } from './categories/entities/category.entity';
 import { Report } from './reports/entities/report.entity';
@@ -38,6 +42,21 @@ import { Booking } from './parking/entities/booking.entity';
 import { Violation } from './parking/entities/violation.entity';
 import { ParkingModule } from './parking/parking.module';
 import { Vehicle } from './parking/entities/vehicle.entity';
+import { GhushReport } from './ghush-reports/entities/ghush-report.entity';
+import { GhushReportEvidence } from './ghush-reports/entities/ghush-report-evidence.entity';
+import { GhushReportsModule } from './ghush-reports/ghush-reports.module';
+import { LostFoundItem } from './lost-found/entities/lost-found-item.entity';
+import { LostFoundModule } from './lost-found/lost-found.module';
+import { HousingListing } from './housing/entities/housing-listing.entity';
+import { HousingReview } from './housing/entities/housing-review.entity';
+import { HousingModule } from './housing/housing.module';
+import { ServiceListing } from './services/entities/service-listing.entity';
+import { ServiceReview } from './services/entities/service-review.entity';
+import { ServicesModule } from './services/services.module';
+import { UniversalComment } from './comments/entities/universal-comment.entity';
+import { UniversalCommentsModule } from './comments/comments.module';
+import { UniversalVote } from './votes/entities/universal-vote.entity';
+import { UniversalVotesModule } from './votes/votes.module';
 
 @Module({
   imports: [
@@ -77,6 +96,15 @@ import { Vehicle } from './parking/entities/vehicle.entity';
           WaterMeter,
           GasMeter,
           ElectricityMeter,
+          GhushReport,
+          GhushReportEvidence,
+          LostFoundItem,
+          HousingListing,
+          HousingReview,
+          ServiceListing,
+          ServiceReview,
+          UniversalComment,
+          UniversalVote,
         ],
         synchronize: true,
       }),
@@ -100,6 +128,29 @@ import { Vehicle } from './parking/entities/vehicle.entity';
     ElectricityModule,
     TransportModule,
     ParkingModule,
+    GhushReportsModule,
+    LostFoundModule,
+    HousingModule,
+    ServicesModule,
+    UniversalCommentsModule,
+    UniversalVotesModule,
+    TypeOrmModule.forFeature([
+      User,
+      Report,
+      GhushReport,
+      ServiceListing,
+      LostFoundItem,
+      ParkingSlot,
+    ]),
+  ],
+  controllers: [AppController],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
   ],
 })
 export class AppModule {}
+

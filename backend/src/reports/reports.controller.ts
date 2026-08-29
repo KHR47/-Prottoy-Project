@@ -28,7 +28,7 @@ import { ReportsService } from './reports.service';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
-  // Citizens only
+  // Citizens only - Authority & Admin perform review and approval
   @UseGuards(RolesGuard)
   @Roles(Role.CITIZEN)
   @Post()

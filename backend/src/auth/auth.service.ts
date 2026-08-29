@@ -110,6 +110,73 @@ export class AuthService {
     }
   }
 
+  async googleLogin(credential: string) {
+    if (!credential) {
+      throw new BadRequestException('Google credential token is required');
+    }
+
+    try {
+      const { OAuth2Client } = await import('google-auth-library');
+      const clientId = process.env.GOOGLE_CLIENT_ID || '824497726439-97jvs4d12t3mvt7ttbco5s23qhe0lihq.apps.googleusercontent.com';
+      const client = new OAuth2Client(clientId);
+
+      const ticket = await client.verifyIdToken({
+        idToken: credential,
+        audience: [
+          clientId,
+          '824497726439-97jvs4d12t3mvt7ttbco5s23qhe0lihq.apps.googleusercontent.com',
+        ].filter(Boolean),
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) {
+        throw new UnauthorizedException('Invalid Google token payload');
+      }
+
+      const email = payload.email.toLowerCase().trim();
+      const name = payload.name || payload.given_name || 'Google User';
+
+      // Find user or create if new
+      let user = await this.usersService.findByEmail(email);
+
+      if (!user) {
+        // Create new citizen account
+        const randomPassword = await bcrypt.hash(Math.random().toString(36) + Date.now().toString(), 10);
+        user = await this.usersService.create({
+          name,
+          email,
+          password: randomPassword,
+          role: Role.CITIZEN,
+          phone: null,
+          district: null,
+        });
+      }
+
+      if (user.isActive === false) {
+        throw new UnauthorizedException('This account has been deactivated. Please contact support.');
+      }
+
+      const jwtPayload = {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+      };
+
+      const accessToken = await this.jwtService.signAsync(jwtPayload);
+
+      return {
+        message: 'Google login successful',
+        accessToken,
+        user: this.toSafeUser(user),
+      };
+    } catch (error: any) {
+      if (error instanceof UnauthorizedException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Google authentication failed: ' + (error?.message || 'Invalid token'));
+    }
+  }
+
   private toSafeUser(user: User): SafeUser {
     const { password, ...safeUser } = user;
     void password;

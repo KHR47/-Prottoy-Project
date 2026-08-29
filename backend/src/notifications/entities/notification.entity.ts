@@ -12,11 +12,14 @@ export class Notification {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ type: 'text' })
   message: string;
 
-  @Column()
-  reportId: number;
+  @Column({ type: 'int', nullable: true, default: null })
+  reportId?: number | null;
+
+  @Column({ type: 'varchar', nullable: true, default: 'general' })
+  type?: string;
 
   @Column({ default: false })
   isRead: boolean;
