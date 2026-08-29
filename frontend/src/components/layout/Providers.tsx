@@ -7,7 +7,9 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { SmoothScroll } from "./SmoothScroll";
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "dummy-google-client-id.apps.googleusercontent.com";
+  const googleClientId =
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+    "824497726439-97jvs4d12t3mvt7ttbco5s23qhe0lihq.apps.googleusercontent.com";
 
   return (
     <GoogleOAuthProvider clientId={googleClientId}>

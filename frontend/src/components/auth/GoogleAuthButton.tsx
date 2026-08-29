@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
@@ -11,13 +11,21 @@ import { useTheme } from "@/context/ThemeContext";
 import { Loader2, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
+const GOOGLE_CLIENT_ID =
+  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+  "824497726439-97jvs4d12t3mvt7ttbco5s23qhe0lihq.apps.googleusercontent.com";
+
 interface GoogleAuthButtonProps {
   onError?: (err: string) => void;
   onSuccess?: () => void;
   text?: "signin_with" | "signup_with" | "continue_with";
 }
 
-export function GoogleAuthButton({ onError, onSuccess, text = "continue_with" }: GoogleAuthButtonProps) {
+export function GoogleAuthButton({
+  onError,
+  onSuccess,
+  text = "continue_with",
+}: GoogleAuthButtonProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
@@ -27,70 +35,145 @@ export function GoogleAuthButton({ onError, onSuccess, text = "continue_with" }:
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState("");
 
-  const triggerGoogleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setIsLoading(true);
-      setLocalError("");
-      const toastId = toast.loading(
-        isBangla ? "গুগল অ্যাকাউন্ট যাচাই হচ্ছে..." : "Signing in with Google..."
+  const handleAuthPayload = async (payload: {
+    accessToken?: string;
+    credential?: string;
+  }) => {
+    setIsLoading(true);
+    setLocalError("");
+    const toastId = toast.loading(
+      isBangla ? "গুগল অ্যাকাউন্ট যাচাই হচ্ছে..." : "Signing in with Google..."
+    );
+
+    try {
+      const response = await api.post("/auth/google", payload);
+
+      saveAuth(response.data.accessToken, response.data.user);
+      onSuccess?.();
+
+      toast.success(
+        isBangla
+          ? `স্বাগতম, ${response.data.user.name || "নাগরিক"}!`
+          : `Welcome back, ${response.data.user.name || "Citizen"}!`,
+        { id: toastId }
       );
 
-      try {
-        const response = await api.post("/auth/google", {
-          accessToken: tokenResponse.access_token,
-        });
+      const role = response.data.user.role;
+      const targetPath =
+        redirectTo ||
+        (role === "citizen"
+          ? "/dashboard"
+          : role === "authority"
+          ? "/authority/dashboard"
+          : role === "officer"
+          ? "/officer/reports"
+          : role === "driver"
+          ? "/driver/dashboard"
+          : role === "attendant"
+          ? "/attendant/dashboard"
+          : "/admin/dashboard");
 
-        saveAuth(response.data.accessToken, response.data.user);
-        onSuccess?.();
-
-        toast.success(
-          isBangla
-            ? `স্বাগতম, ${response.data.user.name || "নাগরিক"}!`
-            : `Welcome back, ${response.data.user.name || "Citizen"}!`,
-          { id: toastId }
-        );
-
-        const role = response.data.user.role;
-        const targetPath =
-          redirectTo ||
-          (role === "citizen"
-            ? "/dashboard"
-            : role === "authority"
-            ? "/authority/dashboard"
-            : role === "officer"
-            ? "/officer/reports"
-            : role === "driver"
-            ? "/driver/dashboard"
-            : role === "attendant"
-            ? "/attendant/dashboard"
-            : "/admin/dashboard");
-
-        setTimeout(() => {
-          window.location.href = targetPath;
-        }, 400);
-      } catch (err: unknown) {
-        const msg = getErrorMessage(
-          err,
-          isBangla
-            ? "গুগল সাইন-ইন সম্পন্ন করা যায়নি। ক্লাউড সার্ভার চালু হতে সময় লাগতে পারে।"
-            : "Google authentication failed. Cloud server might be waking up, please try again."
-        );
-        setLocalError(msg);
-        onError?.(msg);
-        toast.error(msg, { id: toastId });
-        setIsLoading(false);
-      }
-    },
-    onError: (errorResponse) => {
-      console.warn("Google OAuth error:", errorResponse);
-      const msg = isBangla
-        ? "গুগল লগইন বাতিল করা হয়েছে অথবা ব্যর্থ হয়েছে।"
-        : "Google Sign In was cancelled or failed.";
+      setTimeout(() => {
+        window.location.href = targetPath;
+      }, 300);
+    } catch (err: unknown) {
+      const msg = getErrorMessage(
+        err,
+        isBangla
+          ? "গুগল সাইন-ইন সম্পন্ন করা যায়নি। ক্লাউড সার্ভার চালু হতে সময় লাগতে পারে।"
+          : "Google authentication failed. Cloud server might be waking up, please try again."
+      );
       setLocalError(msg);
       onError?.(msg);
+      toast.error(msg, { id: toastId });
       setIsLoading(false);
+    }
+  };
+
+  // Check URL hash on mount for direct OAuth popup / redirect returns
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (window.location.hash) {
+      const params = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = params.get("access_token");
+      const idToken = params.get("id_token");
+
+      if (accessToken || idToken) {
+        window.history.replaceState(null, "", window.location.pathname);
+        if (window.opener) {
+          window.opener.postMessage(
+            { type: "GOOGLE_AUTH_SUCCESS", accessToken, idToken },
+            window.location.origin
+          );
+          window.close();
+          return;
+        }
+        handleAuthPayload({
+          accessToken: accessToken || undefined,
+          credential: idToken || undefined,
+        });
+      }
+    }
+
+    const messageListener = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
+        handleAuthPayload({
+          accessToken: event.data.accessToken,
+          credential: event.data.idToken,
+        });
+      }
+    };
+
+    window.addEventListener("message", messageListener);
+    return () => window.removeEventListener("message", messageListener);
+  }, []);
+
+  const triggerGoogleLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      handleAuthPayload({ accessToken: tokenResponse.access_token });
+    },
+    onError: (errorResponse) => {
+      console.warn("useGoogleLogin error, switching to direct popup:", errorResponse);
+      openDirectOAuthPopup();
     },
   });
+
+  const openDirectOAuthPopup = () => {
+    try {
+      const redirectUri = encodeURIComponent(`${window.location.origin}/login`);
+      const scope = encodeURIComponent("openid email profile");
+      const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=token%20id_token&scope=${scope}&nonce=${Date.now()}&prompt=select_account`;
+
+      const width = 500;
+      const height = 620;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+
+      const popup = window.open(
+        oauthUrl,
+        "GoogleSignInPopup",
+        `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
+      );
+
+      if (!popup || popup.closed || typeof popup.closed === "undefined") {
+        // If popup was blocked by browser, use direct redirect
+        window.location.href = oauthUrl;
+      }
+    } catch (err) {
+      console.error("Direct popup error:", err);
+    }
+  };
+
+  const handleButtonClick = () => {
+    setLocalError("");
+    try {
+      triggerGoogleLogin();
+    } catch {
+      openDirectOAuthPopup();
+    }
+  };
 
   const buttonLabel = (() => {
     if (isBangla) {
@@ -108,10 +191,7 @@ export function GoogleAuthButton({ onError, onSuccess, text = "continue_with" }:
       <button
         type="button"
         id="google-oauth-login-button"
-        onClick={() => {
-          setLocalError("");
-          triggerGoogleLogin();
-        }}
+        onClick={handleButtonClick}
         disabled={isLoading}
         className={`w-full h-11 px-4 rounded-xl font-medium text-sm transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer select-none active:scale-[0.98] ${
           theme === "light"
@@ -122,11 +202,18 @@ export function GoogleAuthButton({ onError, onSuccess, text = "continue_with" }:
         {isLoading ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
-            <span>{isBangla ? "গুগল যাচাই হচ্ছে..." : "Authenticating with Google..."}</span>
+            <span>
+              {isBangla ? "গুগল যাচাই হচ্ছে..." : "Authenticating with Google..."}
+            </span>
           </>
         ) : (
           <>
-            <svg className="w-4.5 h-4.5 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg
+              className="w-4.5 h-4.5 shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"
